@@ -159,4 +159,5 @@ cython_debug/
 alembic/versions/
 alembic/env.py
 alembic/script.py.mako
+alembic.ini
 .env

@@ -2,11 +2,17 @@ from typing import List
 
 from sqlalchemy.orm import Session
 
-from fastapi import FastAPI, Depends
-from .schemas import Book, CreateBook, Author, CreateAuthor, UpdateAuthor, UpdateBook
+from fastapi import FastAPI, Depends, HTTPException
+from .schemas import (
+    Book, CreateBook, Author, CreateAuthor, UpdateAuthor, UpdateBook, User, UserCreate, Subscription,
+    SubscriptionCreate, UserUpdate, Payment, PaymentCreate
+)
 from .database import SessionLocal
-from .crud import book_list, book_create, book_retrieve, author_list, author_create, author_retrieve, book_delete, \
-    book_update, author_update, author_delete
+from .crud import (
+    book_list, book_create, book_retrieve, author_list, author_create, author_retrieve, book_delete,
+    book_update, author_update, author_delete, user_create, get_users, get_user_by_email,
+    subscription_create, user_update, user_delete, payment_create
+)
 
 
 def get_db():
@@ -19,33 +25,42 @@ def get_db():
 
 app = FastAPI()
 
-books_data = [
-    {
-        'id': 1,
-        'title': 'Python',
-        'description': 'Desc 1',
-        'author': 'Dmitriy',
-        'price': 200,
-        'published_year': 2000
-    },{
-        'id': 2,
-        'title': 'Python 2',
-        'description': 'Desc 2',
-        'author': 'Taras',
-        'price': 400,
-        'published_year': 2010
-    },{
-        'id': 3,
-        'title': 'Django',
-        'description': 'Desc 3',
-        'author': 'Andriy',
-        'price': 1000,
-        'published_year': 2020
-    }
-]
+
+@app.post("/users/", response_model=User)
+async def create_user(user: UserCreate, db: Session = Depends(get_db)):
+    db_user = get_user_by_email(db, email=user.email)
+    if db_user:
+        raise HTTPException(status_code=404, detail='Email already registered')
+    return user_create(db=db, user=user)
 
 
-@app.get('/books/')
+@app.get("/users/", response_model=List[User])
+async def read_users(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+    return get_users(db=db, skip=skip, limit=limit)
+
+
+@app.put("/users/{user_id}", response_model=User)
+async def update_user(user_id: int, user: UserUpdate, db: Session = Depends(get_db)):
+    db_user = user_update(db=db, user_id=user_id, update_user=user)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
+
+
+@app.delete("/users/{user_id}", response_model=User)
+async def delete_user(user_id: int, db: Session = Depends(get_db)):
+    db_user = user_delete(db=db, user_id=user_id)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
+
+
+@app.post("/users/{user_id}/subscriptions", response_model=Subscription)
+async def create_subscription_for_user(user_id: int, subscription: SubscriptionCreate, db: Session = Depends(get_db)):
+    return subscription_create(db=db, subscription=subscription, user_id=user_id)
+
+
+@app.get("/books/")
 async def get_book_list(db: Session = Depends(get_db)) -> List[Book]:
     books = book_list(db)
     return books
@@ -97,3 +112,8 @@ async def update_author(author_id: int, author: UpdateAuthor, db: Session = Depe
 @app.delete("/authors/{author_id}", response_model=Author)
 async def delete_author(author_id: int, db: Session = Depends(get_db)):
     return author_delete(db, author_id)
+
+
+@app.post("/users/{user_id}/payments/", response_model=Payment)
+async def create_payment_for_user(user_id: int, payment: PaymentCreate, db: Session = Depends(get_db)):
+    return payment_create(db=db, payment=payment, user_id=user_id)
