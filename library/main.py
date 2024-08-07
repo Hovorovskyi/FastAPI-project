@@ -1,8 +1,11 @@
+import os
+import httpx
+
 from typing import List
-
 from sqlalchemy.orm import Session
+from dotenv import load_dotenv
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, APIRouter
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
 from .auth import (
@@ -30,7 +33,42 @@ def get_db():
         db.close()
 
 
+load_dotenv()
+
 app = FastAPI()
+router = APIRouter()
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+
+@router.post("/chat")
+async def chet_with_gpt(prompt: str):
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="OpenAI API key not found.")
+
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "model": "gpt-3.5-turbo",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 50,
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://api.openai.com/v1/chat/completions", headers=headers, json=data
+        )
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail=response.text)
+
+    result = response.json()
+    return {"response": result["choices"][0]["message"]["content"]}
+
+app.include_router(router)
 
 
 @app.post("/register/", response_model=User)
